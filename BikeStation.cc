@@ -25,20 +25,20 @@ class BikeStation : public cSimpleModule
 
 private:
 
-    double bikes;
-    double vbikes;
-    double cap;
-    int numstations;
-    int ind;
-    int nrad;
-    double deventctr;
-    double beventctr;
-    double nbeventctr;
-    double ndeventctr;
-    double sl;
-    int isneighbor[5];
-    int dist[5];
-    int asdfar;
+    double bikes;//# of bikes in the station
+    double vbikes;//virtual # of bike sin the station
+    double cap;//capacity of the station
+    int numstations;//number of stations in the BSS
+    int ind;//index of the station
+    int nrad;//neighborhood radius
+    double deventctr;//dock event counter
+    double beventctr;//bike event counter
+    double nbeventctr;//no-bike event counter
+    double ndeventctr;//no-dock event counter
+    double sl;//service level
+    int isneighbor[5];//binary matrix for neighbors of the station
+    int dist[5];//distances to each of the other stations
+
 
 protected:
 
@@ -51,23 +51,19 @@ Define_Module(BikeStation);
 
 void BikeStation::initialize()
 {
-    beventctr = 0;
-    deventctr = 0;
-    nbeventctr = 0;
-    ndeventctr = 0;
-    asdfar = 0;
-    sl = 0;
-    numstations = 0;
-    bikes = par("bikes");
-    vbikes = bikes;
-    cap = par("cap");
+    beventctr = 0;//initialization of bike event counter
+    deventctr = 0;//initialization of dock event counter
+    nbeventctr = 0;//initialization of no-bike event counter
+    ndeventctr = 0;//initialization of no-dock event counter
+    sl = 0;//initialization of service level
+    bikes = par("bikes");//initialization of the initial number of bikes for all stations
+    vbikes = bikes;//making virtual bikes equal to actual bikes at the start
+    cap = par("cap");//initialization of bike station capacities
+    ind = par("ind");//initialization of station indexes
+    numstations = getParentModule()->par("numstations_network");//initialization of the number of stations
+    nrad = getParentModule()->par("nrad");//initialization of neighborhood radius
 
-
-    ind = par("ind");
-    numstations = getParentModule()->par("numstations_network");
-    nrad = getParentModule()->par("nrad");
-
-    WATCH(beventctr);
+    WATCH(beventctr);//labeling of watchable variables
     WATCH(deventctr);
     WATCH(nbeventctr);
     WATCH(ndeventctr);
@@ -76,12 +72,9 @@ void BikeStation::initialize()
     WATCH(bikes);
     WATCH(cap);
 
-    const char *vstr = par("distances");
+    const char *vstr = par("distances");//filling in the dist and isneighbor matrix
     std::vector<int> disthold = cStringTokenizer(vstr).asIntVector();
-
-    EV << "I am in initialize matrix" << endl;
-    EV << "distance matrix of ind =  " << ind << " : ";
-    for(int i = 0; i <= numstations-1; i++){ //Initialization of isneighbor vector
+    for(int i = 0; i <= numstations-1; i++){
         EV <<  disthold[i] << " ";
         dist[i] = disthold[i];
         if(disthold[i] <= nrad){
@@ -91,286 +84,202 @@ void BikeStation::initialize()
             isneighbor[i] = 0;
         }
     }
-    EV << endl;
-
 }
 
 void BikeStation::handleMessage(cMessage *msg)
 {
 
-    int traveltss[numstations];
-
+    int traveltss[numstations];//transferring stn travel times from ini to specific gate
     const char *trts = par("traveltimes");
     std::vector<int> timess = cStringTokenizer(trts).asIntVector();
-
     for(int i = 0; i <= numstations-1; i++){
-
         cDelayChannel *channel = check_and_cast<cDelayChannel*>(gate("o_stn_to_stn",i)->getChannel());
         channel->setDelay(timess[i]);
-
     }
 
-    //  remote submodule par access code:
-//        asdfar = getParentModule()->getSubmodule("stn", 2)->par("bikes");
+    //remote submodule par access code:
+    //asdfar = getParentModule()->getSubmodule("stn", 2)->par("bikes");
 
-    if (strcmp(msg->getName(),"walker") == 0){/* if a customer wanting to ride arrives */
+    if (strcmp(msg->getName(),"walker") == 0){/*IF A CUSTOMER WANTING TO RIDE ARRIVES*/
 
-        Customer *wlkc = check_and_cast<Customer *>(msg);
+        Customer *wlkc = check_and_cast<Customer *>(msg);//cast pointer to readable label
 
         int a = wlkc->getOriginaldest();
-         EV <<"ind: " << ind << endl;
-         EV << a << endl;
+        EV <<"ind: " << ind << endl;
+        EV << a << endl;
 
-            if (bikes > 0){ /*If there is a bike available*/
+        if (bikes > 0){/*IF THERE IS A BIKE AVAILABLE FOR THE CUSTOMER WANTING TO RIDE*/
 
-                    EV << "I AM HERE 1" << endl;
+            int coopholder234 = wlkc->getIscooperative();
 
-                    int cfactorholder = getParentModule()->par("cfactor");
+            if(coopholder234==0){/*IF THE CUSTOMER WANTING TO RIDE IS NOT COOPERATIVE*/
 
-                    int cscoreholder2 = wlkc->getCscore();
+                EV <<"Bike event!" << endl;
 
-                    if(cscoreholder2>cfactorholder){/*If customer is not cooperative*/
+                bikes = par("bikes"); //Update bike parameter value for easy access from other submodules
+                bikes--;
+                par("bikes") = bikes;
 
-                        EV << "I AM HERE 2" << endl;
+                Customer *bikc = check_and_cast<Customer *>(wlkc);
+                bikc->setName("biker");
+                bikc->setDisplayString("i=bss/biker");
 
-                        EV <<"Bike event!" << endl;
+                int desthshsh = bikc->getOriginaldest();
+                send(bikc, "o_stn_to_stn", desthshsh); //Send customer to original destination
 
-                        bikes = par("bikes"); //Update bike parameter value for easy access from other submodules
-                        bikes--;
-                        par("bikes") = bikes;
+                int vbikesholder123 = getParentModule()->getSubmodule("stn", desthshsh)->par("vbikes");//update vbikes of destination
+                vbikesholder123++;
+                getParentModule()->getSubmodule("stn", desthshsh)->par("vbikes");
 
+                EV << "Sending message from " << ind << "to " << desthshsh << endl;
 
-                        Customer *bikc = check_and_cast<Customer *>(wlkc);
-                        bikc->setName("biker");
-                        bikc->setDisplayString("i=bss/biker");
-
-                        int desthshsh = bikc->getOriginaldest();
-                        send(bikc, "o_stn_to_stn", desthshsh); //Send customer to original destination
-
-                        EV << "Sending message from " << ind << "to " << desthshsh << endl;
-
-        //                freqsendoutMessage(bikc);
-
-                        beventctr = getParentModule()->par("beventctr_network");
-                        deventctr = getParentModule()->par("deventctr_network");
-                        nbeventctr = getParentModule()->par("nbeventctr_network");
-                        ndeventctr = getParentModule()->par("ndeventctr_network");
-                        beventctr++;
-                        getParentModule()->par("beventctr_network") = beventctr;
-
-
-                        if(hasGUI()){
-                            char label[50];
-                            sprintf(label,"b = %.0f   d = %.0f\nnb = %.0f   nd = %.0f\nSL = %.4f%%", beventctr, deventctr, nbeventctr, ndeventctr, 100*(beventctr+deventctr)/(beventctr+deventctr+nbeventctr+ndeventctr));
-                            cCanvas *canvas = getParentModule()->getCanvas();
-                            cTextFigure *textFigure = check_and_cast<cTextFigure*>(canvas->getFigure("systemstats"));
-                            textFigure->setText(label);
-                        }
-                    }
-
-
-                    else{//if the customer is cooperative
-
-                        EV << "I AM HERE 3" << endl;
-
-                        //send to station nearest the original destination that is within radius and has a fill level under 50%
-                        //destdist[i] = isneighborofdest[i]*isdestthresh[i]*dist[i]
-
-                        bikes = par("bikes"); //Update bike parameter value for easy access from other submodules
-                        bikes--;
-                        par("bikes") = bikes;
-
-                        Customer *bikc = check_and_cast<Customer *>(wlkc);
-                        bikc->setName("biker");
-                        bikc->setDisplayString("i=bss/biker");
-
-                        int origdest = bikc->getOriginaldest();
-
-                        const char *vstrrryr = getParentModule()->getSubmodule("stn", origdest)->par("distances");
-                        std::vector<int> distfromorigdest = cStringTokenizer(vstrrryr).asIntVector();
-
-                        int isneighborofdest[numstations] ;
-
-                        EV << "isneighborofdest0 array: ";
-                        for(int i = 0; i<= numstations-1; i++){
-
-                            EV << isneighborofdest[i] << " ";
-
-                        }
-                        EV << endl;
-
-                        for(int i = 0; i<=numstations-1; i++){
-
-                                isneighborofdest[i] = 0;
-
-                            }
-
-                        EV << "isneighborofdest1 array: ";
-                        for(int i = 0; i<= numstations-1; i++){
-
-                            EV << isneighborofdest[i] << " ";
-
-                        }
-                        EV << endl;
-
-                        for(int i = 1; i<=numstations-1; i++){
-                            if(distfromorigdest[i]<=nrad){
-                                isneighborofdest[i] = 1;
-                            }
-
-                            else{
-                                isneighborofdest[i] = 0;
-
-                            }
-
-                        }
-
-                        EV << "isneighborofdest2 array: ";
-                        for(int i = 0; i<= numstations-1; i++){
-
-                            EV << isneighborofdest[i] << " ";
-
-                        }
-                        EV << endl;
-
-                        const char *vstrryr = par("distances");
-                        std::vector<int> distt = cStringTokenizer(vstrrryr).asIntVector();
-
-                        int isdestthresh[numstations];
-
-                        for(int i = 0; i<=numstations-1; i++){
-
-                            double bhold = par("bikes");
-                            double chold = par("cap");
-                            double upll = par("upll");
-
-                            if ((bhold/chold)>=fmax(upll/chold,0.5)){
-                                isdestthresh[i] = 1;
-                            }
-                            else{
-                                isdestthresh[i] = 0;
-                            }
-                        }
-
-                        int destdist[numstations];
-
-                        int sd = 2000;
-                        int si = -1;
-
-                        for(int i = 0; i <= numstations-1; i++){
-                            destdist[i] = isneighborofdest[i]*dist[i]*isdestthresh[i];
-                        }
-
-                        for(int i = 0; i <= numstations-1; i++){
-                            if(destdist[i]>0){
-                                if(destdist[i]<sd){
-                                    sd = destdist[i];
-                                    si = i;
-                                }
-                            }
-                        }
-
-
-                        EV << "isneighborofdest3 array: ";
-                        for(int i = 0; i<= numstations-1; i++){
-
-                            EV << isneighborofdest[i] << " ";
-
-                        }
-                        EV << endl;
-
-                        EV << "dist array: ";
-                        for(int i = 0; i<= numstations-1; i++){
-
-                            EV << dist[i] << " ";
-
-                        }
-                        EV << endl;
-
-                        EV << "isdestthresh array: ";
-                        for(int i = 0; i<= numstations-1; i++){
-
-                            EV << isdestthresh[i] << " ";
-
-                        }
-                        EV << endl;
-
-                        EV << "destdist array: ";
-                        for(int i = 0; i<= numstations-1; i++){
-
-                            EV << destdist[i] << " ";
-
-                        }
-                        EV << endl;
-
-
-                        EV << "I AM HERE 4" << endl;
-
-                        EV << "si: " << si << endl;
-
-                        if(si>=0){
-
-                        send(bikc, "o_stn_to_stn", si);
-
-                        }
-
-                        else{
-
-                        send(bikc, "o_stn_to_stn", origdest);
-
-                        }
-
-                        EV << "Sending message from " << ind << " to " << si << endl;
-                    }
-            }
-
-
-            else{/* if there are no bikes available*/
-                EV <<"No bike event!" << endl;
-
-                beventctr = getParentModule()->par("beventctr_network");
+                beventctr = getParentModule()->par("beventctr_network");//update counters with beventctr++
                 deventctr = getParentModule()->par("deventctr_network");
                 nbeventctr = getParentModule()->par("nbeventctr_network");
                 ndeventctr = getParentModule()->par("ndeventctr_network");
+                beventctr++;
+                getParentModule()->par("beventctr_network") = beventctr;
+                if(hasGUI()){
+                    char label[50];
+                    sprintf(label,"b = %.0f   d = %.0f\nnb = %.0f   nd = %.0f\nSL = %.4f%%", beventctr, deventctr, nbeventctr, ndeventctr, 100*(beventctr+deventctr)/(beventctr+deventctr+nbeventctr+ndeventctr));
+                    cCanvas *canvas = getParentModule()->getCanvas();
+                    cTextFigure *textFigure = check_and_cast<cTextFigure*>(canvas->getFigure("systemstats"));
+                    textFigure->setText(label);
+                }
 
-                nbeventctr++;
-
-                getParentModule()->par("nbeventctr_network") = nbeventctr;
-
-                    if(hasGUI()){
-                        char label[50];
-                        sprintf(label,"b = %.0f   d = %.0f\nnb = %.0f   nd = %.0f\nSL = %.4f%%", beventctr, deventctr, nbeventctr, ndeventctr, 100*(beventctr+deventctr)/(beventctr+deventctr+nbeventctr+ndeventctr));
-                        cCanvas *canvas = getParentModule()->getCanvas();
-                        cTextFigure *textFigure = check_and_cast<cTextFigure*>(canvas->getFigure("systemstats"));
-                        textFigure->setText(label);
-                    }
-
-                    if(wlkc->getRejects()>0){/*if the customer has already been rejected previously)*/
-                        EV <<"COMPLETELY UNSERVICED CUSTOMER LEAVING SYSTEM" << endl;
-                        delete wlkc;
-                    }
-
-                    else{//If rejected for the first time
-
-                        delete wlkc;
-
-                        cMessage *emp = new cMessage("empty");
-                        send(emp, "o_stn_to_pad");
-                    }
             }
+
+
+            else{/*IF THE CUSTOMER WANTING TO RIDE IS COOPERATIVE*/
+
+                EV <<"Bike event!" << endl;
+
+                bikes = par("bikes"); //Update bike parameter value for easy access from other submodules
+                bikes--;
+                par("bikes") = bikes;
+
+                Customer *bikc = check_and_cast<Customer *>(wlkc);//change message name to biker
+                bikc->setName("biker");
+                bikc->setDisplayString("i=bss/biker");
+
+
+                int origdest = bikc->getOriginaldest();//determine the neighbors of the destination station and fill the isneighborofdest array
+                const char *vstrrryr = getParentModule()->getSubmodule("stn", origdest)->par("distances");
+                std::vector<int> distfromorigdest = cStringTokenizer(vstrrryr).asIntVector();
+                int isneighborofdest[numstations];
+                for(int i = 1; i<=numstations-1; i++){
+                    if(distfromorigdest[i]<=nrad){
+                        isneighborofdest[i] = 1;
+                    }
+                    else{
+                        isneighborofdest[i] = 0;
+                    }
+                }
+
+                int isdestthresh[numstations];//fil the isdestthresh array
+                for(int i = 0; i<=numstations-1; i++){
+                    double bhold = par("bikes");
+                    double chold = par("cap");
+                    double upll = par("upll");
+                    if ((bhold/chold)>=fmax(upll/chold,0.5)){
+                        isdestthresh[i] = 1;
+                    }
+                    else{
+                        isdestthresh[i] = 0;
+                    }
+                }
+
+                int destdist[numstations];//compute for the destdist array
+                for(int i = 0; i <= numstations-1; i++){
+                    destdist[i] = isneighborofdest[i]*dist[i]*isdestthresh[i];
+                }
+
+
+                int sd = 9000;//compute for the shortest distance and its corresponding index
+                int si = -1;
+                for(int i = 0; i <= numstations-1; i++){
+                    if(destdist[i]>0){
+                        if(destdist[i]<sd){
+                            sd = destdist[i];
+                            si = i;
+                        }
+                    }
+                }
+
+                beventctr = getParentModule()->par("beventctr_network");//update counters with beventctr++
+                deventctr = getParentModule()->par("deventctr_network");
+                nbeventctr = getParentModule()->par("nbeventctr_network");
+                ndeventctr = getParentModule()->par("ndeventctr_network");
+                beventctr++;
+                getParentModule()->par("beventctr_network") = beventctr;
+                if(hasGUI()){
+                    char label[50];
+                    sprintf(label,"b = %.0f   d = %.0f\nnb = %.0f   nd = %.0f\nSL = %.4f%%", beventctr, deventctr, nbeventctr, ndeventctr, 100*(beventctr+deventctr)/(beventctr+deventctr+nbeventctr+ndeventctr));
+                    cCanvas *canvas = getParentModule()->getCanvas();
+                    cTextFigure *textFigure = check_and_cast<cTextFigure*>(canvas->getFigure("systemstats"));
+                    textFigure->setText(label);
+                }
+
+                if(si>=0){/*IF SHORTEST DISTANCE EXISTS, SENT TO CORRESPONDING INDEX*/
+
+                    int vbikesholder123 = getParentModule()->getSubmodule("stn", si)->par("vbikes");//update vbikes of destination
+                    vbikesholder123 = vbikesholder123 + 1;
+                    getParentModule()->getSubmodule("stn", si)->par("vbikes");
+                    send(bikc, "o_stn_to_stn", si);
+
+                }
+
+                else{/*IF SHORTEST DISTANCE DOES NOT EXIST, BIKE TO ORIGINAL DESTINATION*/
+
+                    int vbikesholder123 = getParentModule()->getSubmodule("stn", origdest)->par("vbikes");//update vbikes of destination
+                    vbikesholder123 = vbikesholder123 + 1;
+                    getParentModule()->getSubmodule("stn", origdest)->par("vbikes");
+                    send(bikc, "o_stn_to_stn", origdest);
+
+                }
+            }
+        }
+
+
+        else{/*IF THERE IS NO BIKE AVAILABLE FOR THE CUSTOMER WANTING TO RIDE*/
+
+            EV <<"No bike event!" << endl;
+
+            beventctr = getParentModule()->par("beventctr_network");//update counters with nbeventctr++
+            deventctr = getParentModule()->par("deventctr_network");
+            nbeventctr = getParentModule()->par("nbeventctr_network");
+            ndeventctr = getParentModule()->par("ndeventctr_network");
+            nbeventctr++;
+            getParentModule()->par("nbeventctr_network") = nbeventctr;
+            if(hasGUI()){
+                char label[50];
+                sprintf(label,"b = %.0f   d = %.0f\nnb = %.0f   nd = %.0f\nSL = %.4f%%", beventctr, deventctr, nbeventctr, ndeventctr, 100*(beventctr+deventctr)/(beventctr+deventctr+nbeventctr+ndeventctr));
+                cCanvas *canvas = getParentModule()->getCanvas();
+                cTextFigure *textFigure = check_and_cast<cTextFigure*>(canvas->getFigure("systemstats"));
+                textFigure->setText(label);
+            }
+
+            if(wlkc->getRejects()>0){/*IF THE CUSTOMER HAS ALREADY BEEN REJECTED BY AN EMPTY STATION PREVIOUSLY*/
+                EV <<"COMPLETELY UNSERVICED CUSTOMER LEAVING SYSTEM" << endl;
+                delete wlkc;
+            }
+
+            else{/*IF CUSTOMER WAS REJECTED BY AN EMPTY STATION FOR THE FIRST TIME*/
+                wlkc ->setName("empty");
+                send(wlkc, "o_stn_to_pad");
+            }
+        }
     }
 
 
-    else {//if a riding customer from another station arrives
+    else{/*IF A BIKING CUSTOMER ARRIVES FROM ANOTHER STATION*/
+
         Customer *bikc = check_and_cast<Customer *>(msg);
-
-
         int a = bikc->getOriginaldest();
-         EV << ind << endl;
-         EV << a << endl;
+        EV << ind << endl;
+        EV << a << endl;
 
-
-        if(bikes < cap){/*if there is space for docking*/
+        if(bikes < cap){/*IF THERE IS SPACE FOR DOCKING*/
             EV <<"Dock event!" << endl;
 
 
@@ -378,14 +287,12 @@ void BikeStation::handleMessage(cMessage *msg)
             bikes++;
             par("bikes") = bikes;
 
-            beventctr = getParentModule()->par("beventctr_network");
+            beventctr = getParentModule()->par("beventctr_network");//update counters with deventctr++
             deventctr = getParentModule()->par("deventctr_network");
             nbeventctr = getParentModule()->par("nbeventctr_network");
             ndeventctr = getParentModule()->par("ndeventctr_network");
-
             deventctr++;
             getParentModule()->par("deventctr_network") = deventctr;
-
             if(hasGUI()){
                 char label[50];
                 sprintf(label,"b = %.0f   d = %.0f\nnb = %.0f   nd = %.0f\nSL = %.4f%%", beventctr, deventctr, nbeventctr, ndeventctr, 100*(beventctr+deventctr)/(beventctr+deventctr+nbeventctr+ndeventctr));
@@ -394,30 +301,20 @@ void BikeStation::handleMessage(cMessage *msg)
                 textFigure->setText(label);
             }
 
-        delete bikc;
-    }
+            delete bikc;//programatically dispose of the customer
 
-        else{/*if there is no space for docking*/
+        }
 
-            EV << "I AM HERE 6" << endl;
+        else{/*IF THERE IS NO SPACE FOR DOCKING*/
 
             EV <<"No dock event!" << endl;
 
-            int a = bikc->getOriginaldest();
-            int b = bikc->getOriginalstart();
-            EV << b << endl;
-            EV << "ind: " << ind << endl;
-            EV << a << endl;
-            EV << "I AM HERE 10" << endl;
-
-            beventctr = getParentModule()->par("beventctr_network");
+            beventctr = getParentModule()->par("beventctr_network");//update counters with ndeventctr++
             deventctr = getParentModule()->par("deventctr_network");
             nbeventctr = getParentModule()->par("nbeventctr_network");
             ndeventctr = getParentModule()->par("ndeventctr_network");
-
             ndeventctr++;
             getParentModule()->par("ndeventctr_network") = ndeventctr;
-
             if(hasGUI()){
                 char label[50];
                 sprintf(label,"b = %.0f   d = %.0f\nnb = %.0f   nd = %.0f\nSL = %.4f%%", beventctr, deventctr, nbeventctr, ndeventctr, 100*(beventctr+deventctr)/(beventctr+deventctr+nbeventctr+ndeventctr));
@@ -426,20 +323,10 @@ void BikeStation::handleMessage(cMessage *msg)
                 textFigure->setText(label);
             }
 
+            bikc->setStat(ind, 1);//fill in stat array for stations already visited
 
-            EV << "I AM HERE 11" << endl;
-
-            bikc->setStat(ind, 1);
-
-            EV << "I AM HERE 12" << endl;
-
-            int sd = 2000;
+            int sd = 9000;
             int si = -1;
-
-            EV << "I AM HERE 13" << endl;
-
-            const char *vstr = par("distances");
-            std::vector<int> disttt = cStringTokenizer(vstr).asIntVector();
 
             for(int i=0; i<=numstations-1; i++){
                 bikc->setProddist(i,dist[i]);
@@ -457,18 +344,17 @@ void BikeStation::handleMessage(cMessage *msg)
                     }
                 }
             }
-            EV << "I AM HERE 7" << endl;
 
             if(si>=0){
 
-                EV << "I AM HERE 8" << endl;
-
-                EV << "Sending out to the nearest station: Station " << si << " at a distance of " << sd << endl;
+                int vbikesholder123 = getParentModule()->getSubmodule("stn", si)->par("vbikes");//update vbikes of destination
+                vbikesholder123++;
+                getParentModule()->getSubmodule("stn", si)->par("vbikes");
 
                 send(bikc,"o_stn_to_stn",si);
             }
             else{
-                EV << "I AM HERE 9" << endl;
+
                 delete bikc;
                 EV <<"BIKE IS DELETED UMIKOT NA YUNG BIKER SA LAHAT NG STATION" ;
             }
@@ -476,10 +362,6 @@ void BikeStation::handleMessage(cMessage *msg)
     }
 
 }
-
-//##############################################################################################################################################################################
-//######################################################################Functions###############################################################################################
-//##############################################################################################################################################################################
 
 void BikeStation::refreshDisplay() const
 {

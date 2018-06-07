@@ -17,7 +17,7 @@ message Customer
     string displayString = "i=bss/walker";
 	int stat[5];
 	int proddist[5];
-  	int cscore = 0;
+  	int iscooperative = 0;
   	int rejects = 0;
   	int originalstart = 0;
   	int originaldest = 0;

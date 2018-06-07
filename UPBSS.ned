@@ -18,7 +18,7 @@ simple BikeStation
 {
     parameters:
         int bikes = default(0);
-        int virtualbikes = default(0);
+        int vbikes = default(0);
         int cap = default(0);
         int upul = default(1);
         int upll = default(2);
@@ -39,7 +39,7 @@ simple ArrivalPad
 {
     parameters:
         int ind = default(999);
-        double iat @unit(s) = default(99999s);
+        double iat @unit(s) = default(999s);
         string destinationfreqs = default("0 0 0 0 0");
         string traveltimes = default("0 0 0 0 0");
         string distances = default("0 0 0 0 0");
